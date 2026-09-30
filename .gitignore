@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+physics_lab.db
+uploads/
+.env
+*.log
+.trae-cn/
