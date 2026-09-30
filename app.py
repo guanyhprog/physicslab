@@ -961,10 +961,13 @@ def get_stats():
     return jsonify({'studentCount': student_count, 'examCount': exam_count, 'avgScore': avg_score})
 
 
+# 模块加载时初始化数据库（兼容 gunicorn 和直接运行）
+init_db()
+
+
 # ==================== 启动 ====================
 
 if __name__ == '__main__':
-    init_db()
     port = int(os.environ.get('PORT', 5000))
     print('=' * 55)
     print('  PhysicsLab 物理学情分析系统 - Agent 后端')
