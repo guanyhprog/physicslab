@@ -16,20 +16,85 @@ import uuid
 import base64
 import requests
 from datetime import datetime
+import oss2
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app, resources={r"/*": {"origins": "*"}})
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB 上传限制
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# 阿里云函数计算适配：只有 /tmp 目录可写
+# 本地开发时用当前目录，云端部署时用 /tmp
+if os.environ.get('FC_FUNCTION_NAME'):
+    # 阿里云函数计算环境
+    BASE_DIR = '/tmp'
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 DB_PATH = os.path.join(BASE_DIR, 'physics_lab.db')
 UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# ===== 阿里云 OSS 配置 =====
+# 从环境变量读取，本地开发时也可以直接填写
+OSS_ACCESS_KEY_ID = os.environ.get('OSS_ACCESS_KEY_ID', '')
+OSS_ACCESS_KEY_SECRET = os.environ.get('OSS_ACCESS_KEY_SECRET', '')
+OSS_ENDPOINT = os.environ.get('OSS_ENDPOINT', 'oss-cn-hangzhou.aliyuncs.com')
+OSS_BUCKET_NAME = os.environ.get('OSS_BUCKET_NAME', '')
+OSS_DB_KEY = 'physics_lab.db'  # OSS 中数据库文件的路径
+
+# 初始化 OSS 客户端
+oss_bucket = None
+if OSS_ACCESS_KEY_ID and OSS_ACCESS_KEY_SECRET and OSS_BUCKET_NAME:
+    try:
+        auth = oss2.Auth(OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET)
+        oss_bucket = oss2.Bucket(auth, OSS_ENDPOINT, OSS_BUCKET_NAME)
+        print('[OSS] 阿里云 OSS 客户端初始化成功')
+    except Exception as e:
+        print(f'[OSS] OSS 初始化失败: {e}')
+        oss_bucket = None
+else:
+    print('[OSS] 未配置 OSS 环境变量，数据库将不会同步到 OSS')
+
 # ===== DeepSeek API 配置 =====
-DEEPSEEK_KEY = 'sk-f2c53f1b6ae24bc5b470f2678f8e5be6'
+DEEPSEEK_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
 DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions'
 DEEPSEEK_MODEL = 'deepseek-flash'
+
+
+# ==================== OSS 同步函数 ====================
+
+def sync_db_from_oss():
+    """从 OSS 下载数据库文件到本地"""
+    if not oss_bucket:
+        return False
+    try:
+        # 检查 OSS 中是否存在数据库文件
+        try:
+            oss_bucket.get_object_meta(OSS_DB_KEY)
+        except oss2.exceptions.NoSuchKey:
+            print('[OSS] OSS 中不存在数据库文件，跳过下载')
+            return False
+        
+        # 下载数据库文件
+        oss_bucket.get_object_to_file(OSS_DB_KEY, DB_PATH)
+        print('[OSS] 从 OSS 下载数据库成功')
+        return True
+    except Exception as e:
+        print(f'[OSS] 从 OSS 下载数据库失败: {e}')
+        return False
+
+
+def sync_db_to_oss():
+    """将本地数据库文件上传到 OSS"""
+    if not oss_bucket:
+        return False
+    try:
+        oss_bucket.put_object_from_file(OSS_DB_KEY, DB_PATH)
+        print('[OSS] 数据库已同步到 OSS')
+        return True
+    except Exception as e:
+        print(f'[OSS] 同步数据库到 OSS 失败: {e}')
+        return False
 
 
 # ==================== DATABASE ====================
@@ -41,6 +106,10 @@ def get_db():
 
 
 def init_db():
+    # 如果配置了 OSS，先尝试从 OSS 下载数据库
+    if oss_bucket:
+        sync_db_from_oss()
+    
     conn = get_db()
     c = conn.cursor()
 
@@ -476,7 +545,11 @@ init_db()
 
 @app.route('/')
 def serve_index():
-    return send_from_directory('.', 'physics-analysis.html')
+    return jsonify({
+        'status': 'running',
+        'message': 'PhysicsLab API is running!',
+        'version': '1.0.0'
+    })
 
 
 # ==================== Agent API: 试卷分析 ====================
@@ -611,6 +684,7 @@ def agent_analyze_exam():
              json.dumps(image_paths, ensure_ascii=False))
         )
         conn.commit()
+        sync_db_to_oss()  # 同步到 OSS
 
     conn.close()
     print(f'[Agent] 分析结果已保存，exam_id={exam_id}')
@@ -704,6 +778,7 @@ def agent_generate_learning_report():
          json.dumps(analysis_data, ensure_ascii=False))
     )
     conn.commit()
+    sync_db_to_oss()  # 同步到 OSS
     conn.close()
 
     print(f'[Agent] 学情报告已保存，report_id={report_id}')
@@ -765,6 +840,7 @@ def create_student():
          json.dumps(data.get('custom_fields', {}), ensure_ascii=False))
     )
     conn.commit()
+    sync_db_to_oss()  # 同步到 OSS
 
     row = conn.execute('SELECT * FROM students WHERE id = ?', (student_id,)).fetchone()
     conn.close()
@@ -827,6 +903,7 @@ def update_student(student_id):
         values = list(updates.values()) + [student_id]
         conn.execute(f'UPDATE students SET {set_clause} WHERE id = ?', values)
         conn.commit()
+        sync_db_to_oss()  # 同步到 OSS
 
     row = conn.execute('SELECT * FROM students WHERE id = ?', (student_id,)).fetchone()
     student = row_to_dict(row, ['profile_data', 'custom_fields'])
@@ -843,6 +920,7 @@ def delete_student(student_id):
     conn = get_db()
     conn.execute('DELETE FROM students WHERE id = ?', (student_id,))
     conn.commit()
+    sync_db_to_oss()  # 同步到 OSS
     conn.close()
     return jsonify({'success': True, 'message': '学生档案已删除'})
 
@@ -884,6 +962,7 @@ def update_exam(exam_id):
         values.append(exam_id)
         conn.execute(f"UPDATE exams SET {', '.join(updates)} WHERE id = ?", values)
         conn.commit()
+        sync_db_to_oss()  # 同步到 OSS
 
     updated_exam = conn.execute('SELECT * FROM exams WHERE id = ?', (exam_id,)).fetchone()
     conn.close()
@@ -896,6 +975,7 @@ def delete_exam(exam_id):
     conn.execute('DELETE FROM exam_reports WHERE exam_id = ?', (exam_id,))
     conn.execute('DELETE FROM exams WHERE id = ?', (exam_id,))
     conn.commit()
+    sync_db_to_oss()  # 同步到 OSS
     conn.close()
     return jsonify({'success': True, 'message': '考试记录已删除'})
 
@@ -934,6 +1014,7 @@ def add_note(student_id):
         (note_id, student_id, data.get('note_type', 'general'), data.get('content', ''))
     )
     conn.commit()
+    sync_db_to_oss()  # 同步到 OSS
     row = conn.execute('SELECT * FROM student_notes WHERE id = ?', (note_id,)).fetchone()
     conn.close()
     return jsonify(dict(row)), 201
@@ -944,6 +1025,7 @@ def delete_note(note_id):
     conn = get_db()
     conn.execute('DELETE FROM student_notes WHERE id = ?', (note_id,))
     conn.commit()
+    sync_db_to_oss()  # 同步到 OSS
     conn.close()
     return jsonify({'success': True})
 
@@ -968,11 +1050,15 @@ init_db()
 # ==================== 启动 ====================
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    # 阿里云函数计算要求监听 9000 端口
+    port = int(os.environ.get('PORT', 9000))
     print('=' * 55)
     print('  PhysicsLab 物理学情分析系统 - Agent 后端')
     print(f'  服务地址: http://0.0.0.0:{port}')
     print('  AI 模型:  deepseek-flash')
     print('  数据库:   SQLite →', DB_PATH)
     print('=' * 55)
-    app.run(host='0.0.0.0', port=port, debug=False)
+    
+    # 使用 waitress 生产级服务器（兼容阿里云函数计算）
+    from waitress import serve
+    serve(app, host='0.0.0.0', port=port)

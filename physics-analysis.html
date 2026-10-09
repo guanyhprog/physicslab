@@ -1077,19 +1077,157 @@
         .profile-label { display: block; font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
         .profile-value { display: block; font-size: 14px; color: var(--text); font-weight: 500; }
 
+        /* ===== HAMBURGER MENU BUTTON ===== */
+        .mobile-menu-btn {
+            display: none;
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 200;
+            width: 44px;
+            height: 44px;
+            background: var(--sidebar-bg);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-md);
+            color: white;
+        }
+        .mobile-menu-btn svg { width: 22px; height: 22px; }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.5);
+            z-index: 90;
+        }
+        .sidebar-overlay.active { display: block; }
+
         /* ===== RESPONSIVE ===== */
         @media (max-width: 1024px) {
             .main { padding: 24px 20px; }
             .config-grid { grid-template-columns: 1fr 1fr; }
             .report-charts { grid-template-columns: 1fr; }
+            .student-detail-header { flex-wrap: wrap; }
+            .detail-actions { margin-left: 0; width: 100%; }
         }
 
         @media (max-width: 768px) {
-            .sidebar { width: 100%; height: auto; position: relative; }
-            .main { margin-left: 0; }
-            .stats-grid { grid-template-columns: 1fr 1fr; }
-            .analysis-config { grid-template-columns: 1fr; }
+            /* Sidebar: off-canvas drawer */
+            .sidebar {
+                transform: translateX(-100%);
+                width: 280px;
+                z-index: 150;
+            }
+            .sidebar.open { transform: translateX(0); }
+
+            .mobile-menu-btn { display: flex; }
+
+            .main {
+                margin-left: 0;
+                padding: 72px 16px 24px;
+            }
+            .main::before { left: 0; }
+
+            .view-header h1 { font-size: 22px; }
+            .view-header p { font-size: 13px; }
+
+            .stats-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+            .stat-value { font-size: 24px; }
+            .stat-card { padding: 16px; }
+
+            .analysis-config { grid-template-columns: 1fr; padding: 16px; }
             .config-grid { grid-template-columns: 1fr; }
+
+            /* Dashboard two-column layout */
+            #view-dashboard > div:nth-child(3) { grid-template-columns: 1fr !important; }
+
+            /* Upload area */
+            .upload-area { padding: 32px 16px; }
+            .upload-icon { width: 48px; height: 48px; margin-bottom: 12px; }
+            .upload-icon svg { width: 22px; height: 22px; }
+            .upload-text { font-size: 14px; }
+
+            /* Image preview grid */
+            .image-preview-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+
+            /* Student grid */
+            .student-grid { grid-template-columns: 1fr; }
+
+            /* Report */
+            .report-content { padding: 20px 16px; font-size: 14px; }
+            .report-content h1 { font-size: 19px; }
+            .report-content h2 { font-size: 17px; }
+            .report-content h3 { font-size: 15px; }
+            .report-content table { font-size: 12px; }
+            .report-content th, .report-content td { padding: 6px 8px; }
+            .report-toolbar { flex-direction: column; align-items: flex-start; }
+
+            .chart-wrapper { height: 260px; }
+
+            /* Student detail */
+            .student-detail-header { flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; }
+            .detail-avatar { width: 48px; height: 48px; font-size: 20px; }
+            .detail-info h2 { font-size: 18px; }
+
+            /* Exam table scroll */
+            .card-body { padding: 16px; overflow-x: auto; }
+
+            /* Buttons */
+            .btn-lg { padding: 12px 20px; font-size: 14px; }
+            #view-analysis > .card > .card-body > div:nth-child(4) { flex-direction: column; }
+            #view-analysis > .card > .card-body > div:nth-child(4) .btn { width: 100%; justify-content: center; }
+
+            /* Modal */
+            .modal { width: 95%; padding: 20px; max-height: 85vh; }
+            .modal h3 { font-size: 16px; }
+            #profile-editor-modal .modal > div:nth-child(3) { grid-template-columns: 1fr !important; }
+            #profile-editor-modal .modal > div:nth-child(3) .form-group { grid-column: 1 / -1 !important; }
+
+            /* PDF preview */
+            .pdf-preview-wrapper { width: 100%; }
+            .pdf-preview-body { padding: 10px 20px 20px; }
+            .pdf-preview-toolbar { padding: 10px 16px; flex-wrap: wrap; gap: 8px; }
+
+            /* Toast */
+            .toast-container { left: 16px; right: 16px; }
+            .toast { min-width: auto; }
+
+            /* Loading */
+            .loading-card { padding: 32px 24px; max-width: 90%; }
+        }
+
+        @media (max-width: 480px) {
+            .main { padding: 68px 12px 20px; }
+
+            .stats-grid { grid-template-columns: 1fr; gap: 10px; }
+            .stat-card { padding: 14px; }
+            .stat-value { font-size: 22px; }
+
+            .view-header h1 { font-size: 20px; }
+
+            .card-header { padding: 14px 16px 12px; }
+            .card-body { padding: 14px 16px 16px; }
+
+            .upload-area { padding: 24px 12px; }
+            .analysis-config { padding: 12px; gap: 12px; }
+
+            .report-content { padding: 16px 12px; font-size: 13px; }
+            .report-content table { font-size: 11px; }
+            .report-content th, .report-content td { padding: 4px 6px; }
+
+            .chart-wrapper { height: 220px; }
+
+            .image-preview-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
+
+            .student-card { padding: 16px; }
+            .student-stat-value { font-size: 17px; }
+
+            .btn { padding: 10px 16px; font-size: 13px; }
+            .btn-lg { padding: 12px 18px; font-size: 13px; }
         }
 
         /* ===== SCROLLBAR ===== */
@@ -1157,8 +1295,20 @@
     </style>
 </head>
 <body>
+    <!-- Mobile Menu Button -->
+    <button class="mobile-menu-btn" onclick="toggleSidebar()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+    </button>
+
+    <!-- Sidebar Overlay (mobile) -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="sidebar-brand">
                 <div class="sidebar-logo">P</div>
@@ -1502,6 +1652,28 @@
         lastAnalysisData: null,
         lastLearningData: null
     };
+
+    // ===== MOBILE SIDEBAR =====
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('active');
+    }
+
+    function closeSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        sidebar.classList.remove('open');
+        overlay.classList.remove('active');
+    }
+
+    // Close sidebar when clicking a nav item on mobile
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (window.innerWidth <= 768) closeSidebar();
+        });
+    });
 
     // ===== DATA LAYER (API) =====
 
