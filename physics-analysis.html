@@ -1097,6 +1097,35 @@
         }
         .mobile-menu-btn svg { width: 22px; height: 22px; }
 
+        /* ===== MOBILE CAMERA BUTTON ===== */
+        .mobile-camera-btn {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 16px;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 15px;
+            transition: var(--transition);
+            box-shadow: var(--shadow-sm);
+        }
+        .mobile-camera-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        .mobile-camera-btn:active {
+            transform: translateY(0);
+        }
+        .mobile-camera-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
         .sidebar-overlay {
             display: none;
             position: fixed;
@@ -1125,6 +1154,9 @@
             .sidebar.open { transform: translateX(0); }
 
             .mobile-menu-btn { display: flex; }
+
+            /* Camera button visible on mobile */
+            .mobile-camera-btn { display: flex; }
 
             .main {
                 margin-left: 0;
@@ -1383,7 +1415,12 @@
                         </div>
                         <p class="upload-text">拖拽试卷图片到此处，或 <strong>点击上传</strong></p>
                         <p class="upload-hint">支持 JPG、PNG 格式，可上传多张图片</p>
+                        <div class="mobile-camera-btn" id="mobile-camera-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                            <span>拍照录入</span>
+                        </div>
                         <input type="file" id="file-input" accept="image/*" multiple hidden>
+                        <input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
                     </div>
                     <div class="image-preview-grid" id="image-preview-grid"></div>
 
@@ -1980,8 +2017,14 @@
     // ===== FILE UPLOAD =====
     const uploadArea = document.getElementById('upload-area');
     const fileInput = document.getElementById('file-input');
+    const cameraInput = document.getElementById('camera-input');
+    const cameraBtn = document.getElementById('mobile-camera-btn');
 
-    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('click', (e) => {
+        // 阻止点击上传区域时触发相机按钮
+        if (e.target.closest('.mobile-camera-btn')) return;
+        fileInput.click();
+    });
     uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
     uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
     uploadArea.addEventListener('drop', (e) => {
@@ -1992,6 +2035,18 @@
     fileInput.addEventListener('change', (e) => {
         handleFiles(e.target.files);
         e.target.value = '';  // 清空以便可以重复选择相同文件
+    });
+
+    // 相机按钮点击事件
+    cameraBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cameraInput.click();
+    });
+
+    // 相机拍照处理
+    cameraInput.addEventListener('change', (e) => {
+        handleFiles(e.target.files);
+        e.target.value = '';  // 清空以便可以重复拍照
     });
 
     function handleFiles(files) {
