@@ -994,6 +994,10 @@
         .pdf-preview-body .pdf-header p { color: #64748b; font-size: 13px; }
         .pdf-preview-body > :first-child { margin-top: 0 !important; }
         .pdf-preview-body .pdf-meta { display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; margin-bottom: 20px; }
+        .pdf-preview-body .chart-card table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+        .pdf-preview-body .chart-card th { background: #f1f5f9; padding: 6px 8px; border: 1px solid #e2e8f0; font-weight: 600; text-align: left; font-size: 11px; }
+        .pdf-preview-body .chart-card td { padding: 5px 8px; border: 1px solid #f1f5f9; font-size: 11px; }
+        .pdf-preview-body img { max-width: 100%; height: auto; }
 
         /* ===== LIGHTBOX ===== */
         .lightbox-overlay {
@@ -3071,39 +3075,94 @@
     function chartsToHTML(chartsArea) {
         let html = '';
         if (!chartsArea) return html;
+
+        // 1) 统计摘要卡片（内联样式，确保 PDF 中正确渲染）
+        const statsGrid = chartsArea.querySelector('.stats-grid');
+        if (statsGrid) {
+            const cards = statsGrid.querySelectorAll('.stat-card');
+            if (cards.length > 0) {
+                const borderColors = ['#4f46e5', '#7c3aed', '#059669', '#f59e0b'];
+                html += `<div style="display:grid;grid-template-columns:repeat(${Math.min(cards.length, 4)},1fr);gap:16px;margin:20px 0;">`;
+                cards.forEach((card, i) => {
+                    const label = card.querySelector('.stat-label');
+                    const value = card.querySelector('.stat-value');
+                    const trend = card.querySelector('.stat-trend');
+                    html += `<div style="background:#fff;border-radius:10px;padding:18px 16px;border:1px solid #e2e8f0;position:relative;overflow:hidden;page-break-inside:avoid;">`;
+                    html += `<div style="position:absolute;top:0;left:0;right:0;height:3px;background:${borderColors[i % borderColors.length]};"></div>`;
+                    if (label) html += `<div style="font-size:12px;color:#64748b;font-weight:500;margin-bottom:6px;">${label.textContent}</div>`;
+                    if (value) html += `<div style="font-size:26px;font-weight:800;color:#1e293b;font-family:'Outfit',sans-serif;">${value.textContent}</div>`;
+                    if (trend) html += `<div style="font-size:13px;font-weight:600;color:${trend.style.color || '#4f46e5'};margin-top:2px;">${trend.textContent}</div>`;
+                    html += `</div>`;
+                });
+                html += `</div>`;
+            }
+        }
+
+        // 2) 图表卡片 — 收集 canvas 转图片
         const chartCards = chartsArea.querySelectorAll('.chart-card');
         if (chartCards.length === 0) return html;
 
-        // 两列网格布局
-        html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0;">`;
+        // 收集所有图表图片
+        const chartItems = [];
         chartCards.forEach((card) => {
             const canvas = card.querySelector('canvas');
             const title = card.querySelector('h4');
-            if (!canvas) return;
-            try {
-                const chartInstance = Chart.getChart(canvas);
-                let imgSrc;
-                if (chartInstance) {
-                    const origW = canvas.width;
-                    const origH = canvas.height;
-                    const hiResScale = 2;
-                    canvas.width = origW * hiResScale;
-                    canvas.height = origH * hiResScale;
-                    chartInstance.resize();
-                    imgSrc = canvas.toDataURL('image/png');
-                    canvas.width = origW;
-                    canvas.height = origH;
-                    chartInstance.resize();
-                } else {
-                    imgSrc = canvas.toDataURL('image/png');
-                }
+            // 检查是否有表格（逐题诊断等）
+            const table = card.querySelector('table');
+            if (!canvas && !table) return;
 
-                html += `<div style="padding:12px 14px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;page-break-inside:avoid;">`;
-                if (title) html += `<h3 style="font-size:13px;font-weight:700;color:#1e293b;margin:0 0 10px 0;text-align:center;">${title.textContent}</h3>`;
-                html += `<img src="${imgSrc}" style="width:100%;height:auto;display:block;border-radius:4px;" />`;
+            let imgSrc = null;
+            if (canvas) {
+                try {
+                    const chartInstance = Chart.getChart(canvas);
+                    if (chartInstance) {
+                        const origW = canvas.width;
+                        const origH = canvas.height;
+                        canvas.width = origW * 2;
+                        canvas.height = origH * 2;
+                        chartInstance.resize();
+                        imgSrc = canvas.toDataURL('image/png');
+                        canvas.width = origW;
+                        canvas.height = origH;
+                        chartInstance.resize();
+                    } else {
+                        imgSrc = canvas.toDataURL('image/png');
+                    }
+                } catch(e) {
+                    console.warn('图表转图片失败:', e);
+                }
+            }
+            chartItems.push({ title: title ? title.textContent : '', imgSrc, table, card });
+        });
+
+        if (chartItems.length === 0) return html;
+
+        // 判断图表类型：雷达图单独一行，其他两列
+        html += `<div style="margin:20px 0;">`;
+        chartItems.forEach((item, idx) => {
+            const isRadar = item.title.includes('能力维度') || item.title.includes('雷达');
+            if (isRadar) {
+                // 雷达图单独一行，居中显示
+                html += `<div style="padding:16px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:16px;page-break-inside:avoid;">`;
+                html += `<h3 style="font-size:14px;font-weight:700;color:#1e293b;margin:0 0 12px 0;text-align:center;">${item.title}</h3>`;
+                if (item.imgSrc) html += `<img src="${item.imgSrc}" style="width:60%;height:auto;display:block;margin:0 auto;border-radius:4px;" />`;
                 html += `</div>`;
-            } catch(e) {
-                console.warn('图表转图片失败:', e);
+            } else {
+                // 其他图表两列布局
+                if (idx % 2 === 0 || (idx > 0 && chartItems[idx-1] && (chartItems[idx-1].title.includes('能力维度') || chartItems[idx-1].title.includes('雷达')))) {
+                    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">`;
+                }
+                html += `<div style="padding:16px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;page-break-inside:avoid;">`;
+                html += `<h3 style="font-size:14px;font-weight:700;color:#1e293b;margin:0 0 12px 0;text-align:center;">${item.title}</h3>`;
+                if (item.imgSrc) html += `<img src="${item.imgSrc}" style="width:100%;height:auto;display:block;border-radius:4px;" />`;
+                if (item.table) html += item.table.outerHTML;
+                html += `</div>`;
+                // 关闭网格或最后一个元素
+                const nextItem = chartItems[idx + 1];
+                const nextIsRadar = nextItem && (nextItem.title.includes('能力维度') || nextItem.title.includes('雷达'));
+                if (idx % 2 === 1 || !nextItem || nextIsRadar) {
+                    html += `</div>`;
+                }
             }
         });
         html += `</div>`;
@@ -3115,6 +3174,10 @@
         const chartsArea = document.getElementById('analysis-charts');
         const imagesArea = document.getElementById('analysis-images');
         const studentName = document.getElementById('student-name-input').value.trim() || '学生';
+        const examType = document.getElementById('exam-type-select')?.value || '考试';
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+        const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 
         if (!content || !content.innerHTML.trim()) {
             showToast('暂无分析报告内容，请先完成试卷分析', 'warning');
@@ -3127,18 +3190,33 @@
         if (imagesArea) {
             const images = imagesArea.querySelectorAll('img');
             if (images.length > 0) {
-                imagesHTML = `<div style="margin-top:30px;padding-top:20px;border-top:1px solid #e2e8f0;"><h3 style="font-size:16px;color:#333;margin-bottom:15px;">试卷图片</h3><div style="display:flex;gap:10px;flex-wrap:wrap;">`;
+                imagesHTML = `<div style="margin-top:24px;padding-top:20px;border-top:2px solid #e2e8f0;page-break-before:avoid;">`;
+                imagesHTML += `<h3 style="font-size:15px;color:#1e293b;margin-bottom:14px;font-weight:700;">附：试卷图片</h3>`;
+                imagesHTML += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">`;
                 images.forEach(img => {
-                    imagesHTML += `<img src="${img.src}" style="height:100px;width:auto;border-radius:6px;border:1px solid #e2e8f0;" />`;
+                    imagesHTML += `<div style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;"><img src="${img.src}" style="width:100%;height:auto;display:block;" /></div>`;
                 });
                 imagesHTML += `</div></div>`;
             }
         }
 
-        _pdfFilename = `试卷分析报告_${studentName}_${new Date().toLocaleDateString('zh-CN')}`;
+        _pdfFilename = `试卷分析报告_${studentName}_${dateStr.replace(/\//g, '-')}`;
+
+        // 构建 PDF 头部
+        const headerHTML = `
+            <div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #4f46e5;">
+                <h1 style="font-size:24px;color:#4f46e5;margin:0 0 6px 0;font-weight:800;font-family:'Outfit','PingFang SC',sans-serif;">物理学情分析报告</h1>
+                <div style="display:flex;justify-content:center;gap:24px;font-size:13px;color:#64748b;margin-top:8px;">
+                    <span>学生：${studentName}</span>
+                    <span>类型：${examType}</span>
+                    <span>日期：${dateStr} ${timeStr}</span>
+                </div>
+            </div>
+        `;
 
         const previewBody = document.getElementById('pdf-preview-body');
         previewBody.innerHTML = `
+            ${headerHTML}
             ${content.innerHTML}
             ${chartsHTML}
             ${imagesHTML}
@@ -3152,6 +3230,9 @@
         const chartsArea = document.getElementById('learning-charts');
         const select = document.getElementById('learning-student-select');
         const studentName = select.options[select.selectedIndex]?.text || '学生';
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+        const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 
         if (!content || !content.innerHTML.trim()) {
             showToast('暂无学情报告内容，请先生成学情报告', 'warning');
@@ -3160,10 +3241,21 @@
 
         const chartsHTML = chartsToHTML(chartsArea);
 
-        _pdfFilename = `学情报告_${studentName}_${new Date().toLocaleDateString('zh-CN')}`;
+        _pdfFilename = `学情报告_${studentName}_${dateStr.replace(/\//g, '-')}`;
+
+        const headerHTML = `
+            <div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #7c3aed;">
+                <h1 style="font-size:24px;color:#7c3aed;margin:0 0 6px 0;font-weight:800;font-family:'Outfit','PingFang SC',sans-serif;">学生学情跟踪报告</h1>
+                <div style="display:flex;justify-content:center;gap:24px;font-size:13px;color:#64748b;margin-top:8px;">
+                    <span>学生：${studentName}</span>
+                    <span>日期：${dateStr} ${timeStr}</span>
+                </div>
+            </div>
+        `;
 
         const previewBody = document.getElementById('pdf-preview-body');
         previewBody.innerHTML = `
+            ${headerHTML}
             ${content.innerHTML}
             ${chartsHTML}
         `;
