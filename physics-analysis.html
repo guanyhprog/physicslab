@@ -2217,6 +2217,27 @@
         const imagesContainer = document.getElementById('analysis-images');
         if (imagesContainer) imagesContainer.innerHTML = '';
 
+        // 统计摘要卡片
+        let summaryHtml = '';
+        if (analysisData.score !== undefined && analysisData.totalScore) {
+            const rate = ((analysisData.score / analysisData.totalScore) * 100).toFixed(1);
+            summaryHtml += `<div class="stat-card"><div class="stat-label">得分</div><div class="stat-value">${analysisData.score}/${analysisData.totalScore}</div><div class="stat-trend" style="color:${rate>=85?'#059669':rate>=60?'#f59e0b':'#dc2626'}">${rate}%</div></div>`;
+        }
+        if (analysisData.questionCount) {
+            summaryHtml += `<div class="stat-card"><div class="stat-label">题目总数</div><div class="stat-value">${analysisData.questionCount}</div></div>`;
+        }
+        if (analysisData.difficultyDistribution) {
+            const d = analysisData.difficultyDistribution;
+            summaryHtml += `<div class="stat-card"><div class="stat-label">难度分布</div><div class="stat-value" style="font-size:16px">易${d.easy||0} 中${d.medium||0} 难${d.hard||0}</div></div>`;
+        }
+        if (analysisData.tierLevel) {
+            const tierColors = {'优秀':'#059669','良好':'#4f46e5','达标':'#f59e0b','临界':'#f97316','预警':'#dc2626'};
+            summaryHtml += `<div class="stat-card"><div class="stat-label">层次定位</div><div class="stat-value" style="color:${tierColors[analysisData.tierLevel]||'#4f46e5'}">${analysisData.tierLevel}</div></div>`;
+        }
+        if (summaryHtml) {
+            chartsContainer.innerHTML += `<div class="stats-grid" style="margin-bottom:24px">${summaryHtml}</div>`;
+        }
+
         if (analysisData.abilityScores) {
             chartsContainer.innerHTML += '<div class="chart-card"><h4>能力维度评估</h4><div class="chart-wrapper"><canvas id="ability-radar-chart"></canvas></div></div>';
         }
@@ -2229,6 +2250,21 @@
         if (analysisData.difficultyDistribution) {
             chartsContainer.innerHTML += '<div class="chart-card"><h4>难度分布</h4><div class="chart-wrapper"><canvas id="difficulty-chart"></canvas></div></div>';
         }
+        // 错因四维分布
+        if (analysisData.errorDistribution) {
+            chartsContainer.innerHTML += '<div class="chart-card"><h4>错因归类分析</h4><div class="chart-wrapper"><canvas id="error-dist-chart"></canvas></div></div>';
+        }
+        // 逐题诊断表
+        if (analysisData.questionDiagnosis && analysisData.questionDiagnosis.length > 0) {
+            let tableHtml = '<div class="chart-card"><h4>逐题诊断详情</h4><div style="overflow-x:auto"><table class="form-input" style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#f8fafc"><th style="padding:8px;text-align:left;border-bottom:2px solid #e2e8f0">题号</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e2e8f0">知识点</th><th style="padding:8px;text-align:center;border-bottom:2px solid #e2e8f0">难度P</th><th style="padding:8px;text-align:center;border-bottom:2px solid #e2e8f0">区分度D</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e2e8f0">能力类型</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e2e8f0">常见错误</th></tr></thead><tbody>';
+            analysisData.questionDiagnosis.forEach(q => {
+                const pColor = q.difficulty > 0.7 ? '#059669' : q.difficulty >= 0.4 ? '#f59e0b' : '#dc2626';
+                const dColor = q.discrimination >= 0.4 ? '#059669' : q.discrimination >= 0.3 ? '#4f46e5' : q.discrimination >= 0.2 ? '#f59e0b' : '#dc2626';
+                tableHtml += `<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:8px;font-weight:600">${q.questionNo}</td><td style="padding:8px">${q.knowledgePoint}</td><td style="padding:8px;text-align:center;color:${pColor};font-weight:600">${q.difficulty.toFixed(2)}</td><td style="padding:8px;text-align:center;color:${dColor};font-weight:600">${q.discrimination.toFixed(2)}</td><td style="padding:8px">${q.abilityType}</td><td style="padding:8px;font-size:12px">${(q.commonErrors||[]).join('、')}</td></tr>`;
+            });
+            tableHtml += '</tbody></table></div></div>';
+            chartsContainer.innerHTML += tableHtml;
+        }
 
         // Render charts after DOM update
         setTimeout(() => {
@@ -2236,6 +2272,7 @@
             if (analysisData.knowledgePoints && analysisData.knowledgePoints.length > 0) renderKnowledgeBar(analysisData.knowledgePoints);
             if (analysisData.errorTypes && analysisData.errorTypes.length > 0) renderErrorPie(analysisData.errorTypes);
             if (analysisData.difficultyDistribution) renderDifficultyChart(analysisData.difficultyDistribution);
+            if (analysisData.errorDistribution) renderErrorDistChart(analysisData.errorDistribution);
         }, 100);
 
         const reportContainer = document.getElementById('analysis-report');
@@ -2272,13 +2309,20 @@
             informationExtraction: '信息提取'
         };
 
+        // 自动判断是0-1还是0-10尺度
+        const vals = Object.values(scores);
+        const maxVal = Math.max(...vals);
+        const isPercent = maxVal <= 1.2;
+        const chartMax = isPercent ? 1 : 10;
+        const chartData = isPercent ? vals.map(v => Math.round(v * 100)) : vals;
+
         state.charts.abilityRadar = new Chart(ctx, {
             type: 'radar',
             data: {
                 labels: Object.keys(scores).map(k => labels[k] || k),
                 datasets: [{
-                    label: '能力评分',
-                    data: Object.values(scores),
+                    label: isPercent ? '得分率(%)' : '能力评分',
+                    data: chartData,
                     backgroundColor: 'rgba(79, 70, 229, 0.15)',
                     borderColor: '#4f46e5',
                     pointBackgroundColor: '#4f46e5',
@@ -2290,8 +2334,8 @@
                 maintainAspectRatio: false,
                 scales: {
                     r: {
-                        min: 0, max: 10,
-                        ticks: { stepSize: 2, font: { size: 10 } },
+                        min: 0, max: isPercent ? 100 : chartMax,
+                        ticks: { stepSize: isPercent ? 20 : 2, font: { size: 10 } },
                         pointLabels: { font: { size: 12 } }
                     }
                 },
@@ -2305,16 +2349,17 @@
         if (!ctx) return;
         destroyChart('knowledgeBar');
 
-        const colors = { '掌握': '#059669', '基本掌握': '#f59e0b', '薄弱': '#dc2626' };
+        const masteryColors = { '优秀': '#059669', '掌握': '#059669', '良好': '#4f46e5', '基本掌握': '#f59e0b', '达标': '#f59e0b', '薄弱': '#dc2626', '预警': '#dc2626' };
+        const hasScoreRate = knowledgePoints.some(k => k.scoreRate !== undefined);
 
         state.charts.knowledgeBar = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: knowledgePoints.map(k => k.name),
                 datasets: [{
-                    label: '分值',
-                    data: knowledgePoints.map(k => k.score || 0),
-                    backgroundColor: knowledgePoints.map(k => colors[k.mastery] || '#94a3b8'),
+                    label: hasScoreRate ? '得分率(%)' : '分值',
+                    data: knowledgePoints.map(k => hasScoreRate ? Math.round((k.scoreRate || 0) * 100) : (k.score || 0)),
+                    backgroundColor: knowledgePoints.map(k => masteryColors[k.mastery] || '#94a3b8'),
                     borderRadius: 6
                 }]
             },
@@ -2328,14 +2373,22 @@
                         callbacks: {
                             afterLabel: (ctx) => {
                                 const kp = knowledgePoints[ctx.dataIndex];
-                                return `掌握程度: ${kp.mastery}`;
+                                let info = `掌握程度: ${kp.mastery}`;
+                                if (kp.score) info += ` | 分值: ${kp.score}`;
+                                if (kp.questions) info += ` | 题号: ${kp.questions}`;
+                                return info;
                             }
                         }
                     }
                 },
                 scales: {
-                    x: { grid: { color: '#f1f5f9' } },
-                    y: { grid: { display: false } }
+                    x: {
+                        min: 0,
+                        max: hasScoreRate ? 100 : undefined,
+                        ticks: hasScoreRate ? { callback: v => v + '%', font: { size: 11 } } : { font: { size: 11 } },
+                        grid: { color: '#f1f5f9' }
+                    },
+                    y: { grid: { display: false }, ticks: { font: { size: 12 } } }
                 }
             }
         });
@@ -2362,6 +2415,43 @@
                 maintainAspectRatio: false,
                 plugins: {
                     legend: { position: 'right', labels: { font: { size: 12 }, padding: 12 } }
+                }
+            }
+        });
+    }
+
+    function renderErrorDistChart(dist) {
+        const ctx = document.getElementById('error-dist-chart');
+        if (!ctx) return;
+        destroyChart('errorDist');
+
+        const labels = { knowledge: '知识性错误', method: '方法性错误', habit: '习惯性错误', ability: '能力性错误' };
+        const colors = { knowledge: '#dc2626', method: '#f59e0b', habit: '#3b82f6', ability: '#8b5cf6' };
+
+        const entries = Object.entries(dist).filter(([k, v]) => v > 0);
+        if (entries.length === 0) return;
+
+        state.charts.errorDist = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: entries.map(([k]) => labels[k] || k),
+                datasets: [{
+                    label: '占比',
+                    data: entries.map(([, v]) => Math.round(v * 100)),
+                    backgroundColor: entries.map(([k]) => colors[k] || '#94a3b8'),
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y}%` } }
+                },
+                scales: {
+                    y: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+                    x: { grid: { display: false }, ticks: { font: { size: 12 } } }
                 }
             }
         });
